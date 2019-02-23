@@ -1,0 +1,11 @@
+#/bin/bash
+
+if [[ $# -ne 1 || $1 -eq 0 ]]; then
+	echo "USAGE $0 [number of bits to read]"
+	echo "number of bits can not be 0"
+	exit 1
+fi
+
+sudo insmod robot_ssi.ko
+sudo chmod 666 /sys/ssi/stream
+echo $1 > /sys/ssi/stream
