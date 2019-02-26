@@ -114,11 +114,11 @@ static struct kobj_attribute ssi_attribute =__ATTR(stream, (S_IRUGO | S_IWUSR), 
 static int __init robot_ssi_init(void){
   	printk(KERN_INFO "SSI: staring...");
   	
-	gpio_request(A1, "A1");
-  	gpio_request(A2, "A2");
+	gpio_request(CLK, "A1");
+  	gpio_request(DATA, "A2");
 
-  	gpio_direction_output(A1, 0);
-  	gpio_direction_input(A2);
+  	gpio_direction_output(CLK, 0);
+  	gpio_direction_input(DATA);
 
 	ssi_kobject = kobject_create_and_add("ssi", NULL);
 	
@@ -133,8 +133,8 @@ static int __init robot_ssi_init(void){
 static void __exit robot_ssi_exit(void){
   	printk(KERN_INFO "SSI: stopping.");
   	
-	gpio_free(A1);
-  	gpio_free(A2);
+	gpio_free(CLK);
+  	gpio_free(DATA);
 
   	kfree(a);
   	kfree(b);
