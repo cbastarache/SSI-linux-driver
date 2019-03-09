@@ -11,6 +11,7 @@
 
 #define CLK_DELAY 20
 #define READ_ATTEMPTS 3
+#define RESET_DELAY 10000
 
 MODULE_LICENSE("GPL");
 
@@ -90,6 +91,9 @@ static ssize_t get_ssi(struct kobject *kobj, struct kobj_attribute *attr, char *
 	u8 ret_val = 0;
 
 	do {
+		if ( attempts > 0 ) {
+			usleep_range(RESET_DELAY, RESET_DELAY);		
+		}
 		read_device(a);
 		read_device(b);
 		attempts = attempts + 1;
