@@ -9,9 +9,11 @@
 #define CLK  25 // GPIO 25 pin 22
 #define DATA  8 // GPIO 8 pin 24
 
-#define CLK_DELAY 20
+#define CLK_DELAY 15
 #define READ_ATTEMPTS 3
-#define RESET_DELAY 10000
+
+//by the current spec of the fpga, reset delay must be between 0.05 and 0.1s
+#define RESET_DELAY 60000
 
 MODULE_LICENSE("GPL");
 
@@ -40,7 +42,7 @@ static void read_device(u32 *val){
 		block = i / (32);
 		val[block] = val[block] | gpio_get_value(DATA) << (i%32);
 		
-		//printk("SSI read: blk %d val %d", block, val[block]);		
+		//printk("SSI read: blk %d  i %d val %d", block, i%32, val[block]);		
 		usleep_range(CLK_DELAY, CLK_DELAY);
 	}
 }
@@ -95,11 +97,12 @@ static ssize_t get_ssi(struct kobject *kobj, struct kobj_attribute *attr, char *
 			usleep_range(RESET_DELAY, RESET_DELAY);		
 		}
 		read_device(a);
+		usleep_range(RESET_DELAY, RESET_DELAY);		
 		read_device(b);
 		attempts = attempts + 1;
-	} while (compare_lists() != 0 && attempts <= READ_ATTEMPTS);		
+	} while (compare_lists() != 0 && attempts < READ_ATTEMPTS);		
 	
-	if(attempts >= READ_ATTEMPTS) { 
+	if(attempts > READ_ATTEMPTS) { 
 		printk(KERN_ERR "SSI: ERROR read failed after %d attempts!", attempts);	
 		return sprintf(buf, "%d", -1); 
 	}
@@ -110,6 +113,8 @@ static ssize_t get_ssi(struct kobject *kobj, struct kobj_attribute *attr, char *
 
 	for ( i = 0; i < data_length; i = i + 1 )
 		ret_val = ret_val + sprintf(buf + strlen(buf), "%d\n", a[i]); 
+		//test line for checking SSI device 	
+		//ret_val = ret_val + sprintf(buf + strlen(buf), "%d\t%d\n", a[i], b[i]); 
 	return ret_val;
 }
 
