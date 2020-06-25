@@ -9,11 +9,12 @@
 #define CLK  25 // GPIO 25 pin 22
 #define DATA  8 // GPIO 8 pin 24
 
-#define CLK_DELAY 15
-#define READ_ATTEMPTS 3
-
-//by the current spec of the fpga, reset delay must be between 0.05 and 0.1s
-#define RESET_DELAY 60000
+#define CLK_DELAY 300
+#define READ_ATTEMPTS 0
+// change in data must be less than this value to succeed
+#define DATA_PASS 200
+//by the current spec of the fpga, index reset delay must be between 150us and 0.001s
+#define RESET_DELAY 500
 
 MODULE_LICENSE("GPL");
 
@@ -22,7 +23,16 @@ static struct kobject *ssi_kobject;
 static u8 size = 0;
 static u32 *a;
 static u32 *b;
+static u32 *lastVals;
 static u8 data_length = 0;
+
+static void showValues(void){
+	u8 i;
+	for ( i = 0; i < data_length; i ++ ){
+		printk(KERN_INFO "SSI: Data[%d]: %d\t%d\t%d\n",
+				i, a[i], b[i], lastVals[i]);
+	}
+}
 
 static void read_device(u32 *val){
 	u8 i;
@@ -47,18 +57,34 @@ static void read_device(u32 *val){
 	}
 }
 
+static u8 compare_lists(void) {
+	u8 i = 0;
+
+	for ( i = 0; i < data_length; i++) {
+		if (a[i] != b[i]){
+			printk(KERN_ERR "SSI: Data doesnt match: %d\t%d\n", a[i], b[i]);
+			return 1;
+		}
+	}
+
+	return 0;
+}
+
 static ssize_t set_ssi(struct kobject *kobj, struct kobj_attribute *attr, const char *buff, size_t count) {
 	
 	//allocate 32 byte blocks for transmission
 	u8 tmp = 0;
+	u8 i;
+	u8 attempts = 0;
 	data_length = 0;
-	
+		
 	sscanf(buff, "%hhd", &size);
 	tmp = size;
 	
-	if (a || b) {
+	if (a || b || lastVals) {
 		kfree(a);
 		kfree(b);
+		kfree(lastVals);
 	}
 
 	while (tmp <= size && tmp > 0) { 
@@ -69,28 +95,38 @@ static ssize_t set_ssi(struct kobject *kobj, struct kobj_attribute *attr, const 
 	printk(KERN_INFO "SSI: allocating %d blocks for %d bits", data_length, size); 
 	a = kmalloc(sizeof(*a) * data_length, GFP_KERNEL);
 	b = kmalloc(sizeof(*b) * data_length, GFP_KERNEL);
+	lastVals = kmalloc(sizeof(*lastVals) * data_length, GFP_KERNEL);
 
-	if (!a || !b) {
+	if (!a || !b || !lastVals) {
 		printk(KERN_ERR "SSI: Memory allocation failed.");
 	}
-		
+	
+	do {
+		if ( attempts > 0 ) {
+			usleep_range(RESET_DELAY*2, RESET_DELAY*2);		
+		}
+		read_device(a);
+		usleep_range(RESET_DELAY, RESET_DELAY);		
+		read_device(b);
+		attempts = attempts + 1;
+	} while (compare_lists() != 0 && attempts < 100);		
+	
+	printk(KERN_INFO "initial attempts: %d\n", attempts);
+	for( i = 0; i < data_length; i = i + 1 ){	
+		lastVals[i] = a[i];
+		printk(KERN_INFO "initializing lastVal[%d] to %d\n", i, lastVals[i]); 
+	}	
+
 	return count;
 }
 
-static u8 compare_lists(void) {
-	u8 i = 0;
 
-	for ( i = 0; i < data_length; i++) {
-		if (a[i] != b[i])
-			return 1;
-	}
-	return 0;
-}
 
 static ssize_t get_ssi(struct kobject *kobj, struct kobj_attribute *attr, char *buf){
 	u8 attempts = 0;
 	u8 i = 0;
 	u8 ret_val = 0;
+	s32 diff;
 
 	do {
 		if ( attempts > 0 ) {
@@ -101,20 +137,35 @@ static ssize_t get_ssi(struct kobject *kobj, struct kobj_attribute *attr, char *
 		read_device(b);
 		attempts = attempts + 1;
 	} while (compare_lists() != 0 && attempts < READ_ATTEMPTS);		
-	
-	if(attempts > READ_ATTEMPTS) { 
+
+	/*	
+	if(attempts >= READ_ATTEMPTS) { 
 		printk(KERN_ERR "SSI: ERROR read failed after %d attempts!", attempts);	
 		return sprintf(buf, "%d", -1); 
 	}
-	
-	if(attempts > 1){
-		printk(KERN_WARNING "SSI: WARNING took multiple attempts to read from device");
+*/
+	showValues();	
+	for ( i = 0; i < data_length; i++ ) {
+		diff = a[i] - lastVals[i];	
+		if ( !(diff < DATA_PASS && diff > -DATA_PASS)){
+			printk(KERN_ERR "SSI: ERROR read shows a random change lastValue[%d] %d, current %d", i, lastVals[i], a[i]);	
+			return sprintf(buf, "%d", -2); 
+		}
 	}
 
-	for ( i = 0; i < data_length; i = i + 1 )
+	if(attempts > 1){
+		printk(KERN_WARNING "SSI: WARNING took multiple (%d) attempts to read from device", attempts);
+	}
+
+
+	for ( i = 0; i < data_length; i = i + 1 ){
+		//printk(KERN_INFO "SSI: writing Data: %d\n", a[i]);
+
+		lastVals[i] = a[i];
 		ret_val = ret_val + sprintf(buf + strlen(buf), "%d\n", a[i]); 
 		//test line for checking SSI device 	
 		//ret_val = ret_val + sprintf(buf + strlen(buf), "%d\t%d\n", a[i], b[i]); 
+	}
 	return ret_val;
 }
 
@@ -128,6 +179,8 @@ static int __init robot_ssi_init(void){
 
   	gpio_direction_output(CLK, 0);
   	gpio_direction_input(DATA);
+
+	
 
 	ssi_kobject = kobject_create_and_add("ssi", NULL);
 	
@@ -147,6 +200,7 @@ static void __exit robot_ssi_exit(void){
 
   	kfree(a);
   	kfree(b);
+	kfree(lastVals);
  
   	kobject_put(ssi_kobject);
 }
