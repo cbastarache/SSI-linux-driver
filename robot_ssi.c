@@ -9,12 +9,12 @@
 #define CLK  25 // GPIO 25 pin 22
 #define DATA  8 // GPIO 8 pin 24
 
-#define CLK_DELAY 300
+#define CLK_DELAY 100
 #define READ_ATTEMPTS 0
 // change in data must be less than this value to succeed
 #define DATA_PASS 200
 //by the current spec of the fpga, index reset delay must be between 150us and 0.001s
-#define RESET_DELAY 500
+#define RESET_DELAY CLK_DELAY<<3
 
 MODULE_LICENSE("GPL");
 
@@ -144,7 +144,7 @@ static ssize_t get_ssi(struct kobject *kobj, struct kobj_attribute *attr, char *
 		return sprintf(buf, "%d", -1); 
 	}
 */
-	showValues();	
+	//showValues();	
 	for ( i = 0; i < data_length; i++ ) {
 		diff = a[i] - lastVals[i];	
 		if ( !(diff < DATA_PASS && diff > -DATA_PASS)){
