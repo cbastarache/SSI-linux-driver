@@ -17,7 +17,8 @@
 #define RESET_DELAY CLK_DELAY<<3
 
 MODULE_LICENSE("GPL");
-
+MODULE_SOFTDEP("post: hci_uart");
+ 
 struct task_struct *task;
 static struct kobject *ssi_kobject;
 static u8 size = 0;
@@ -111,16 +112,14 @@ static ssize_t set_ssi(struct kobject *kobj, struct kobj_attribute *attr, const 
 		attempts = attempts + 1;
 	} while (compare_lists() != 0 && attempts < 100);		
 	
-	printk(KERN_INFO "initial attempts: %d\n", attempts);
+	printk(KERN_INFO "SSI: initial attempts: %d\n", attempts);
 	for( i = 0; i < data_length; i = i + 1 ){	
 		lastVals[i] = a[i];
-		printk(KERN_INFO "initializing lastVal[%d] to %d\n", i, lastVals[i]); 
+		printk(KERN_INFO "SSI: initializing lastVal[%d] to %d\n", i, lastVals[i]); 
 	}	
 
 	return count;
 }
-
-
 
 static ssize_t get_ssi(struct kobject *kobj, struct kobj_attribute *attr, char *buf){
 	u8 attempts = 0;
